@@ -1,13 +1,13 @@
 {
-    "version": "0.2.1",
-    "defaults": {},
-    "configurations": [
-      {
-        "type": "default",
-        "project": "CMakeLists.txt",
-        "projectTarget": "VulkanApp.exe (VulkanApp\\Debug\\VulkanApp.exe)",
-        "name": "VulkanApp.exe (VulkanApp\\Debug\\VulkanApp.exe)",
-        "currentDir": "${workspaceRoot}"
-      }
-    ]
-  }
+  "version": "0.2.1",
+  "defaults": {},
+  "configurations": [
+    {
+      "type": "default",
+      "project": "CMakeLists.txt",
+      "projectTarget": "VulkanApp.exe (VulkanApp\\VulkanApp.exe)",
+      "name": "VulkanApp.exe (VulkanApp\\VulkanApp.exe)",
+      "currentDir": "${workspaceRoot}"
+    }
+  ]
+}

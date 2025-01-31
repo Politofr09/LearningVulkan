@@ -141,7 +141,8 @@ static std::vector<char> ReadBinaryFile(const std::string& filename)
 
 	if (!file.is_open())
 	{
-		throw std::runtime_error("Failed to open file!");
+		std::cout << "Working directory: " << std::filesystem::current_path() << std::endl;
+		throw std::runtime_error("Failed to open file: " + filename);
 	}
 
 	size_t fileSize = (size_t)file.tellg();

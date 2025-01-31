@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.8.0)
 
 find_package(Vulkan REQUIRED)
 
@@ -44,5 +44,3 @@ target_compile_definitions(VulkanApp PRIVATE
     $<$<CONFIG:Debug>:DEBUG>
     $<$<CONFIG:Release>:RELEASE>
 )
-
-set_property(TARGET VulkanApp PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
