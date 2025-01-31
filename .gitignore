@@ -10,3 +10,13 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
+
+# Ignore Visual Studio specific files
+.vs/
+.vs2019/
+.vs2017/
+.vs2015/
+/out/
+CMakeSettings.json
+# Track launch.vs.json specifically
+!.vs/launch.vs.json
