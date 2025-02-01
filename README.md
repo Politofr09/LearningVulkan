@@ -3,7 +3,7 @@ My progress learning the vulkan graphics API. Let's see how far I develop the re
 
 ## Project Description
 
-This project documents my journey learning the Vulkan graphics API. It includes various stages of development, from setting up the initial environment to creating a fully functional renderer. Each step is accompanied by code examples, explanations, and resources that I found helpful along the way.
+This project documents my journey learning the Vulkan graphics API. It includes various stages of development, from setting up the initial environment to creating a fully functional renderer.
 
 ## Features
 
