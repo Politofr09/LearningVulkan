@@ -1,22 +1,9 @@
-CMakeLists.txt.user
-CMakeCache.txt
-CMakeFiles
-CMakeScripts
-Testing
-Makefile
-cmake_install.cmake
-install_manifest.txt
-compile_commands.json
-CTestTestfile.cmake
-_deps
-CMakeUserPresets.json
-
-# Ignore Visual Studio specific files
-.vs/
-.vs2019/
-.vs2017/
-.vs2015/
-/out/
-CMakeSettings.json
-# Track launch.vs.json specifically
-!.vs/launch.vs.json
+*.sln
+.vs
+*.vcxproj
+*bin/
+*.make
+*.workspace
+*.project
+*.vcxproj.filters
+*.vcxproj.user
