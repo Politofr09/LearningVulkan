@@ -1,7 +1,8 @@
 *.sln
 .vs
 *.vcxproj
-*bin/
+*/bin
+*/bin-obj
 *.make
 *.workspace
 *.project

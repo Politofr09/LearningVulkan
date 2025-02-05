@@ -17,15 +17,18 @@ project "VulkanApp"
         "%{IncludeDir.GLFW}",
         "%{IncludeDir.Vulkan}",
         "%{IncludeDir.stb}",
+        "%{IncludeDir.imgui}"
     }
 
     libdirs {
         "%{LibraryDir.Vulkan}",
         "%{LibraryDir.GLFW}",
-        "%{LibraryDir.stb}"
+        "%{LibraryDir.stb}",
+        "%{LibraryDir.imgui}"
     }
 
     links {
+        "ImGui",
         "GLFW",
         "vulkan-1",
         "stb",

@@ -21,6 +21,8 @@
 #include <array>
 #include <chrono>
 
+#include <imgui.h>
+
 struct Vertex
 {
 	glm::vec3 Position;
@@ -1823,6 +1825,8 @@ private:
 
 int main(void)
 {
+	IMGUI_CHECKVERSION();
+
 	HelloTriangleApplication app;
 
 	try
