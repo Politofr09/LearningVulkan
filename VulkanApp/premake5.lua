@@ -32,11 +32,22 @@ project "VulkanApp"
     }
     
     filter "configurations:Debug"
+        defines "DEBUG"
+
         symbols "On"
         optimize "Off"
         runtime "Debug"
 
     filter "configurations:Release"
+        defines "RELEASE"
+
+        symbols "Off"
+        optimize "On"
+        runtime "Release"
+
+    filter "configurations:Dist"
+        defines "DIST"
+
         symbols "Off"
         optimize "On"
         runtime "Release"
