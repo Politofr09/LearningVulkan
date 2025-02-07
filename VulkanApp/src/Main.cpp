@@ -22,6 +22,8 @@
 #include <chrono>
 
 #include <imgui.h>
+#include <backends/imgui_impl_glfw.h>
+#include <backends/imgui_impl_vulkan.h>
 
 struct Vertex
 {
@@ -181,6 +183,7 @@ public:
 
 		InitWindow();
 		InitVulkan();
+		InitImGui();
 		Loop();
 		Cleanup();
 	}
@@ -285,6 +288,33 @@ private:
 		CreateSyncObjects();
 	}
 
+	void InitImGui()
+	{
+		ImGui::CreateContext();
+
+		//ImGui::GetIO().ConfigFlags add viewport and dock but I didn't get that branch...
+
+		// TODO: Somehow make my submodule the docking branch of imgui...
+
+		ImGui_ImplGlfw_InitForVulkan(m_Window, true);
+
+		ImGui_ImplVulkan_InitInfo initInfo
+		{
+			.Instance = m_Instance,
+			.PhysicalDevice = m_PhysicalDevice,
+			.Device = m_Device,
+			.Queue = m_GraphicsQueue,
+			.DescriptorPool = m_DescriptorPool,
+			.RenderPass = m_RenderPass,
+			.MinImageCount = MAX_FRAMES_IN_FLIGHT,
+			.ImageCount = MAX_FRAMES_IN_FLIGHT,
+			.MSAASamples = VK_SAMPLE_COUNT_1_BIT,
+		};
+		ImGui_ImplVulkan_Init(&initInfo);
+
+		vkDeviceWaitIdle(m_Device);
+	}
+
 	void Loop()
 	{
 		while (!glfwWindowShouldClose(m_Window))
@@ -298,6 +328,10 @@ private:
 
 	void Cleanup()
 	{
+		ImGui_ImplVulkan_Shutdown();
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext();
+
 		CleanupSwapChain();
 
 		vkDestroySampler(m_Device, m_TextureSampler, nullptr);
@@ -688,7 +722,8 @@ private:
 		// And 8bit per channel
 		for (const auto& availableFormat : availableFormats)
 		{
-			if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+			// ImGui wants VK_FORMAT_B8G8R8A8_UNORM
+			if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
 				return availableFormat;
 		}
 		// It's okay don't worry
@@ -1443,12 +1478,13 @@ private:
 		poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2;
 
 		VkDescriptorPoolCreateInfo poolInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-			.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
+			.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+			.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2,
 			.poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
 			.pPoolSizes = poolSizes.data(),
 		};
@@ -1561,6 +1597,9 @@ private:
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		
+		// Modified for imgui
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
 		if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
 		{
 			throw std::runtime_error("Failed to begin recording command buffer!");
@@ -1616,6 +1655,17 @@ private:
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &m_DescriptorSets[m_CurrentFrameIndex], 0, nullptr);
 
 			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+
+			// ImGui here
+			ImGui_ImplVulkan_NewFrame();
+			ImGui_ImplGlfw_NewFrame();
+			ImGui::NewFrame();
+
+			ImGui::ShowDemoWindow();
+
+			ImGui::Render();
+
+			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 
 		vkCmdEndRenderPass(commandBuffer);
 
@@ -1766,11 +1816,10 @@ private:
 		}
 
 		UpdateUniformBuffer(m_CurrentFrameIndex);
+		RecordCommandBuffer(m_CommandBuffers[m_CurrentFrameIndex], imageIndex);
 
 		vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrameIndex]);
 
-		vkResetCommandBuffer(m_CommandBuffers[m_CurrentFrameIndex], 0);
-		RecordCommandBuffer(m_CommandBuffers[m_CurrentFrameIndex], imageIndex);
 
 		VkSubmitInfo submitInfo{};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
