@@ -172,10 +172,11 @@ static std::vector<char> ReadBinaryFile(const std::string& filename)
 	return buf;
 }
 
-class HelloTriangleApplication
+
+class Application
 {
 public:
-	HelloTriangleApplication() = default;
+	Application() = default;
 
 	void Run()
 	{
@@ -205,14 +206,18 @@ private:
 	VkFormat m_SwapChainImageFormat{};
 	VkExtent2D m_SwapChainExtent{};
 	std::vector<VkImageView> m_SwapChainImageViews{};
-	VkRenderPass m_RenderPass{};
 
+	VkRenderPass m_RenderPass{};
 	VkDescriptorSetLayout m_DescriptorSetLayout{};
 	VkPipelineLayout m_PipelineLayout{};
 	VkPipeline m_GraphicsPipeline{};
 	std::vector<VkFramebuffer> m_SwapChainFramebuffers{};
 	VkCommandPool m_CommandPool{};
 	std::vector<VkCommandBuffer> m_CommandBuffers{};
+
+	VkImage m_DepthImage{};
+	VkDeviceMemory m_DepthImageMemory{};
+	VkImageView m_DepthImageView{};
 
 	std::vector<VkSemaphore> m_ImageAvailableSemaphores{}; // Image has been acquired from the swapchain and is ready for rendering
 	std::vector<VkSemaphore> m_RenderFinishedSemaphores{}; // Rendering has finished
@@ -256,7 +261,7 @@ private:
 
 	static void FrameBufferResizeCallback(GLFWwindow* window, int width, int height)
 	{
-		auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+		auto app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
 		app->m_FramebufferResized = true;
 	}
 
@@ -274,8 +279,9 @@ private:
 		CreateRenderPass();
 		CreateDescriptorSetLayout();
 		CreateGraphicsPipeline();
-		CreateFrameBuffers();
 		CreateCommandPool();
+		CreateDepthRessources();
+		CreateFrameBuffers();
 		CreateTextureImage();
 		CreateTextureImageView();
 		CreateTextureSampler();
@@ -292,9 +298,9 @@ private:
 	{
 		ImGui::CreateContext();
 
-		//ImGui::GetIO().ConfigFlags add viewport and dock but I didn't get that branch...
-
-		// TODO: Somehow make my submodule the docking branch of imgui...
+		ImGuiIO& io = ImGui::GetIO();
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
+		//io.ConfigViewportsNoDecoration = false;
 
 		ImGui_ImplGlfw_InitForVulkan(m_Window, true);
 
@@ -331,6 +337,10 @@ private:
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
+
+		vkDestroyImageView(m_Device, m_DepthImageView, nullptr);
+		vkDestroyImage(m_Device, m_DepthImage, nullptr);
+		vkFreeMemory(m_Device, m_DepthImageMemory, nullptr);
 
 		CleanupSwapChain();
 
@@ -686,6 +696,7 @@ private:
 
 		CreateSwapChain();
 		CreateImageViews();
+		CreateDepthRessources();
 		CreateFrameBuffers();
 	}
 
@@ -773,7 +784,7 @@ private:
 
 		for (size_t i = 0; i < m_SwapChainImages.size(); i++)
 		{
-			m_SwapChainImageViews[i] = CreateImageView(m_SwapChainImages[i], m_SwapChainImageFormat);
+			m_SwapChainImageViews[i] = CreateImageView(m_SwapChainImages[i], m_SwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 		}
 	}
 
@@ -825,26 +836,48 @@ private:
 			.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		};
 
-		VkSubpassDescription subpass{};
-		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		subpass.colorAttachmentCount = 1;
-		subpass.pColorAttachments = &colorAttachmentRef;
+		VkAttachmentDescription depthAttchment
+		{
+			.format = FindDepthFormat(),
+			.samples = VK_SAMPLE_COUNT_1_BIT,
+			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+			.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+			.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+		};
+
+		VkAttachmentReference depthAttachmentRef
+		{
+			.attachment = 1,
+			.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+		};
+
+		VkSubpassDescription subpass
+		{
+			.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+			.colorAttachmentCount = 1,
+			.pColorAttachments = &colorAttachmentRef,
+			.pDepthStencilAttachment = &depthAttachmentRef,
+		};
 
 		VkSubpassDependency dependency
 		{
 			.srcSubpass = VK_SUBPASS_EXTERNAL,
 			.dstSubpass = 0,
-			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
 			.srcAccessMask = 0,
-			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
 		};
 
+		std::vector <VkAttachmentDescription> attachments = { colorAttachment, depthAttchment };
 		VkRenderPassCreateInfo renderPassInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-			.attachmentCount = 1,
-			.pAttachments = &colorAttachment,
+			.attachmentCount = static_cast<uint32_t>(attachments.size()),
+			.pAttachments = attachments.data(),
 			.subpassCount = 1,
 			.pSubpasses = &subpass,
 			.dependencyCount = 1,
@@ -1007,6 +1040,16 @@ private:
 			.pDynamicStates = dynamicStates.data(),
 		};
 
+		VkPipelineDepthStencilStateCreateInfo depthStencil
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+			.depthTestEnable = VK_TRUE,
+			.depthWriteEnable = VK_TRUE,
+			.depthCompareOp = VK_COMPARE_OP_LESS,
+			.depthBoundsTestEnable = VK_FALSE,
+			.stencilTestEnable = VK_FALSE,
+		};
+
 		// Tie everything together in the pipeline object
 		VkGraphicsPipelineCreateInfo pipelineInfo
 		{
@@ -1018,7 +1061,7 @@ private:
 			.pViewportState = &viewportState,
 			.pRasterizationState = &rasterizer,
 			.pMultisampleState = &multisampling,
-			.pDepthStencilState = nullptr, // Not used for now
+			.pDepthStencilState = &depthStencil,
 			.pColorBlendState = &colorBlending,
 			.pDynamicState = &dynamicState,
 			.layout = m_PipelineLayout,
@@ -1041,16 +1084,21 @@ private:
 		m_SwapChainFramebuffers.resize(m_SwapChainImageViews.size());
 		for (size_t i = 0; i < m_SwapChainFramebuffers.size(); i++)
 		{
-			VkImageView attachments[] = {
-				m_SwapChainImageViews[i]
+			std::array<VkImageView, 2> attachments = {
+				m_SwapChainImageViews[i],
+				
+				// The color attachment differs for every swap chain image, 
+				// but the same depth image can be used by all of them because 
+				// only a single subpass is running at the same time due to our semaphores.
+				m_DepthImageView,
 			};
 
 			VkFramebufferCreateInfo framebufferInfo
 			{
 				.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
 				.renderPass = m_RenderPass,
-				.attachmentCount = 1,
-				.pAttachments = attachments,
+				.attachmentCount = static_cast<uint32_t>(attachments.size()),
+				.pAttachments = attachments.data(),
 				.width = m_SwapChainExtent.width,
 				.height = m_SwapChainExtent.height,
 				.layers = 1,
@@ -1078,6 +1126,56 @@ private:
 		{
 			throw std::runtime_error("Failed to create command pool!");
 		}
+	}
+
+	VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
+	{
+		for (VkFormat format : candidates)
+		{
+			VkFormatProperties props;
+			vkGetPhysicalDeviceFormatProperties(m_PhysicalDevice, format, &props);
+
+			if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features)
+			{
+				return format;
+			}
+			else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features)
+			{
+				return format;
+			}
+		}
+		throw std::runtime_error("Failed to find supported format!");
+	}
+
+	VkFormat FindDepthFormat()
+	{
+		return FindSupportedFormat(
+			{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+		);
+	}
+
+	bool HasStencilComponent(VkFormat format) 
+	{
+		return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
+	}
+
+	void CreateDepthRessources()
+	{
+		VkFormat depthFormat = FindDepthFormat();
+
+		CreateImage(
+			m_SwapChainExtent.width, m_SwapChainExtent.height, 
+			depthFormat, 
+			VK_IMAGE_TILING_OPTIMAL, 
+			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, 
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
+			m_DepthImage, 
+			m_DepthImageMemory
+		);
+
+		m_DepthImageView = CreateImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 	}
 
 	void CreateTextureImage()
@@ -1160,10 +1258,10 @@ private:
 
 	void CreateTextureImageView()
 	{
-		m_TextureImageView = CreateImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB);
+		m_TextureImageView = CreateImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 	}
 
-	VkImageView CreateImageView(VkImage image, VkFormat format)
+	VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
 	{
 		VkImageViewCreateInfo viewInfo
 		{
@@ -1173,7 +1271,7 @@ private:
 			.format = format,
 			.subresourceRange
 			{
-				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.aspectMask = aspectFlags,
 				.baseMipLevel = 0,
 				.levelCount = 1,
 				.baseArrayLayer = 0,
@@ -1606,7 +1704,12 @@ private:
 		}
 
 		// Start a render pass
-		VkClearValue clearColor = {{{ 0.0f, 0.0f, 0.0f, 1.0f }}};
+
+		// 2 clear values, one for the color and one for the depth
+		std::array<VkClearValue, 2> clearValues{};
+		clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+		clearValues[1].depthStencil = { 1.0f, 0 };
+
 		VkRenderPassBeginInfo renderPassInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -1617,8 +1720,8 @@ private:
 				.offset = { 0, 0 },
 				.extent = m_SwapChainExtent,
 			},
-			.clearValueCount = 1,
-			.pClearValues = &clearColor,
+			.clearValueCount = static_cast<uint32_t>(clearValues.size()),
+			.pClearValues = clearValues.data(),
 		};
 
 		vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -1661,9 +1764,20 @@ private:
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
 
-			ImGui::ShowDemoWindow();
 
+			ImGui::Begin("Hello, vulkan");
+			{
+				ImGui::Text("Currently nothing interesting to show...");
+			}
+			ImGui::End();
 			ImGui::Render();
+
+			if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+			{
+				ImGui::UpdatePlatformWindows();
+				ImGui::RenderPlatformWindowsDefault();
+			}
+
 
 			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 
@@ -1876,7 +1990,7 @@ int main(void)
 {
 	IMGUI_CHECKVERSION();
 
-	HelloTriangleApplication app;
+	Application app;
 
 	try
 	{
