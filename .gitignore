@@ -8,3 +8,9 @@
 *.project
 *.vcxproj.filters
 *.vcxproj.user
+
+*.lib
+*.tlog
+*.pdb
+*.idb
+*.log
