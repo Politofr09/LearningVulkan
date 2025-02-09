@@ -343,11 +343,7 @@ private:
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
-
-		vkDestroyImageView(m_Device, m_DepthImageView, nullptr);
-		vkDestroyImage(m_Device, m_DepthImage, nullptr);
-		vkFreeMemory(m_Device, m_DepthImageMemory, nullptr);
-
+		
 		CleanupSwapChain();
 
 		vkDestroySampler(m_Device, m_TextureSampler, nullptr);
@@ -669,6 +665,10 @@ private:
 
 	void CleanupSwapChain()
 	{
+		vkDestroyImageView(m_Device, m_DepthImageView, nullptr);
+		vkDestroyImage(m_Device, m_DepthImage, nullptr);
+		vkFreeMemory(m_Device, m_DepthImageMemory, nullptr);
+
 		for (size_t i = 0; i < m_SwapChainFramebuffers.size(); i++)
 		{
 			vkDestroyFramebuffer(m_Device, m_SwapChainFramebuffers[i], nullptr);
@@ -1971,9 +1971,8 @@ private:
 		uint32_t imageIndex;
 		VkResult result = vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrameIndex], VK_NULL_HANDLE, &imageIndex);
 		
-		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || m_FramebufferResized) // Means the swap chain is no longer adequate during presentation
+		if (result == VK_ERROR_OUT_OF_DATE_KHR) // Means the swap chain is no longer adequate during presentation
 		{
-			m_FramebufferResized = false;
 			RecreateSwapChain();
 			return;
 		}
