@@ -2,12 +2,16 @@
 #include <GLFW/glfw3.h>
 
 #define GLM_FORCE_RADIANS
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/hash.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
 
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tinyobjloader/tiny_obj_loader.h>
 
 #include <iostream>
 #include <vector>
@@ -24,6 +28,9 @@
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
+
+const char* MODEL_PATH = "res/models/viking_room.obj";
+const char* TEXTURE_PATH = "res/textures/viking_room.png";
 
 struct Vertex
 {
@@ -69,26 +76,22 @@ struct Vertex
 		
 		return attributeDescriptions;
 	}
+
+	bool operator == (const Vertex& other) const
+	{
+		return Position == other.Position && Color == other.Color && TexCoord == other.TexCoord;
+	}
 };
 
-const std::vector<Vertex> vertices = {
-	// Position   ----  Color          ---- TexCoord
-	{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-	{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-	{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-	{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-
-	{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-	{{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-	{{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-	{{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
-};
-
-// uint16_t is fine for now (65535 possible values)
-const std::vector<uint16_t> indices = {
-	0, 1, 2, 2, 3, 0,
-	4, 5, 6, 6, 7, 4
-};
+namespace std {
+	template<> struct hash<Vertex> {
+		size_t operator()(Vertex const& vertex) const {
+			return ((hash<glm::vec3>()(vertex.Position) ^
+				(hash<glm::vec3>()(vertex.Color) << 1)) >> 1) ^
+				(hash<glm::vec2>()(vertex.TexCoord) << 1);
+		}
+	};
+}
 
 struct UniformBufferObject
 {
@@ -223,6 +226,8 @@ private:
 	std::vector<VkSemaphore> m_RenderFinishedSemaphores{}; // Rendering has finished
 	std::vector<VkFence> m_InFlightFences{};
 
+	std::vector<Vertex> m_Vertices;
+	std::vector<uint32_t> m_Indices;
 	VkBuffer m_VertexBuffer{};
 	VkDeviceMemory m_VertexBufferMemory{};
 	VkBuffer m_IndexBuffer{};
@@ -285,6 +290,7 @@ private:
 		CreateTextureImage();
 		CreateTextureImageView();
 		CreateTextureSampler();
+		LoadModel();
 		CreateVertexBuffer();
 		CreateIndexBuffer();
 		CreateUniformBuffers();
@@ -1181,7 +1187,7 @@ private:
 	void CreateTextureImage()
 	{
 		int width, height, channels;
-		stbi_uc* pixels = stbi_load("res/textures/wall.jpg", &width, &height, &channels, STBI_rgb_alpha);
+		stbi_uc* pixels = stbi_load(TEXTURE_PATH, &width, &height, &channels, STBI_rgb_alpha);
 
 		if (!pixels)
 		{
@@ -1508,10 +1514,56 @@ private:
 		EndSingleTimeCommands(commandBuffer);
 	}
 
+	void LoadModel()
+	{
+		tinyobj::attrib_t attrib;
+
+		std::vector<tinyobj::shape_t> shapes;
+		std::vector<tinyobj::material_t> materials;
+
+		std::string warn, err;
+
+		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH))
+		{
+			throw std::runtime_error(warn + err);
+		}
+
+		std::unordered_map<Vertex, uint32_t> uniqueVertices{};
+
+		for (const auto& shape : shapes)
+		{
+			for (const auto& index : shape.mesh.indices)
+			{
+				Vertex vertex{};
+				vertex.Position = {
+					attrib.vertices[3 * index.vertex_index + 0],
+					attrib.vertices[3 * index.vertex_index + 1],
+					attrib.vertices[3 * index.vertex_index + 2],
+				};
+
+				vertex.TexCoord = {
+					attrib.texcoords[2 * index.texcoord_index + 0],
+					1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+				};
+
+				vertex.Color = { 1.0f, 1.0f, 1.0f };
+
+				if (uniqueVertices.count(vertex) == 0)
+				{
+					uniqueVertices[vertex] = static_cast<uint32_t>(m_Vertices.size());
+					m_Vertices.push_back(vertex);
+				}
+
+				m_Indices.push_back(uniqueVertices[vertex]);
+
+			}
+		}
+	}
+
 	void CreateVertexBuffer()
 	{
 		// We create 2 buffers, one in the CPU side, and another in the GPU
-		VkDeviceSize bufferSize = sizeof(Vertex) * vertices.size();
+		VkDeviceSize bufferSize = sizeof(Vertex) * m_Vertices.size();
 		
 		VkBuffer stagingBuffer; // Temporary buffer on the CPU side
 		VkDeviceMemory stagingBufferMemory;
@@ -1520,7 +1572,7 @@ private:
 		// Filling the vertex buffer
 		void* data;
 		vkMapMemory(m_Device, stagingBufferMemory, 0, bufferSize, 0, &data); // Basically allow us to access a specified memory resource
-			memcpy(data, vertices.data(), (size_t)bufferSize);
+			memcpy(data, m_Vertices.data(), (size_t)bufferSize);
 		vkUnmapMemory(m_Device, stagingBufferMemory);
 
 		CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_VertexBuffer, m_VertexBufferMemory);
@@ -1533,7 +1585,7 @@ private:
 
 	void CreateIndexBuffer()
 	{
-		VkDeviceSize bufferSize = sizeof(uint16_t) * indices.size();
+		VkDeviceSize bufferSize = sizeof(uint32_t) * m_Indices.size();
 
 		VkBuffer stagingBuffer;
 		VkDeviceMemory stagingBufferMemory;
@@ -1541,7 +1593,7 @@ private:
 
 		void* data;
 		vkMapMemory(m_Device, stagingBufferMemory, 0, bufferSize, 0, &data);
-			memcpy(data, indices.data(), (size_t) bufferSize);
+			memcpy(data, m_Indices.data(), (size_t) bufferSize);
 		vkUnmapMemory(m_Device, stagingBufferMemory);
 
 		CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_IndexBuffer, m_IndexBufferMemory);
@@ -1733,7 +1785,7 @@ private:
 			VkDeviceSize offsets[] = { 0 };
 			vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
-			vkCmdBindIndexBuffer(commandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+			vkCmdBindIndexBuffer(commandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 			VkViewport viewport
 			{
@@ -1757,7 +1809,7 @@ private:
 			
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &m_DescriptorSets[m_CurrentFrameIndex], 0, nullptr);
 
-			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_Indices.size()), 1, 0, 0, 0);
 
 			// ImGui here
 			ImGui_ImplVulkan_NewFrame();
@@ -1767,7 +1819,8 @@ private:
 
 			ImGui::Begin("Hello, vulkan");
 			{
-				ImGui::Text("Currently nothing interesting to show...");
+				ImGui::Text("Number of triangles in mesh: %i", m_Indices.size());
+				ImGui::Text("Memory used: %i", m_Vertices.size() * sizeof(Vertex));
 			}
 			ImGui::End();
 			ImGui::Render();

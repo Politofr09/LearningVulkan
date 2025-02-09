@@ -17,14 +17,16 @@ project "VulkanApp"
         "%{IncludeDir.GLFW}",
         "%{IncludeDir.Vulkan}",
         "%{IncludeDir.stb}",
-        "%{IncludeDir.imgui}"
+        "%{IncludeDir.imgui}",
+        "%{IncludeDir.tinyobjloader}"
     }
 
     libdirs {
         "%{LibraryDir.Vulkan}",
         "%{LibraryDir.GLFW}",
         "%{LibraryDir.stb}",
-        "%{LibraryDir.imgui}"
+        "%{LibraryDir.imgui}",
+        "%{LibraryDir.tinyobjloader}"
     }
 
     links {
@@ -32,6 +34,7 @@ project "VulkanApp"
         "GLFW",
         "vulkan-1",
         "stb",
+        "tinyobjloader"
     }
     
     filter "configurations:Debug"
