@@ -29,6 +29,8 @@
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
 
+#include "Camera.h"
+
 const char* MODEL_PATH = "res/models/viking_room.obj";
 const char* TEXTURE_PATH = "res/textures/viking_room.png";
 
@@ -249,6 +251,8 @@ private:
 
 	uint32_t m_CurrentFrameIndex = 0;
 
+	Camera m_Camera;
+
 private:
 	void InitWindow()
 	{ 
@@ -263,6 +267,8 @@ private:
 		// Life hack: store arbitrary pointer inside glfw window...
 		glfwSetWindowUserPointer(m_Window, this);
 		glfwSetFramebufferSizeCallback(m_Window, FrameBufferResizeCallback);
+
+		Input::CreateInputDevices(m_Window);
 	}
 
 	static void FrameBufferResizeCallback(GLFWwindow* window, int width, int height)
@@ -330,9 +336,15 @@ private:
 
 	void Loop()
 	{
+		float lastTime = 0.0f;
 		while (!glfwWindowShouldClose(m_Window))
 		{
+			float currentTime = glfwGetTime();
+			float deltaTime = currentTime - lastTime;
+			lastTime = currentTime;
+
 			glfwPollEvents();
+			m_Camera.Update(deltaTime);
 			DrawFrame();
 		}
 
@@ -2053,16 +2065,10 @@ private:
 
 	void UpdateUniformBuffer(uint32_t currentImage)
 	{
-		static auto startTime = std::chrono::high_resolution_clock::now();
-
-		auto currentTime = std::chrono::high_resolution_clock::now();
-
-		float t = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
 		UniformBufferObject ubo
 		{
-			.transform = glm::rotate(glm::mat4(1.0f), t * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
-			.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
+			.transform = glm::mat4(1.0f),
+			.view = m_Camera.GetView(),
 			.projection = glm::perspective(glm::radians(45.0f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height, 0.1f, 10.0f)
 		};
 
