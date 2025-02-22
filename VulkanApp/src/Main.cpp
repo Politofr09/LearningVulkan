@@ -7,11 +7,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb/stb_image.h>
-
-#define TINYOBJLOADER_IMPLEMENTATION
-#include <tinyobjloader/tiny_obj_loader.h>
+#define TINYGLTF_NO_FLIP_V
+#include <tinygltf/tiny_gltf.h>
+#include <tinygltf/stb_image.h>
 
 #include <iostream>
 #include <vector>
@@ -31,7 +29,7 @@
 
 #include "Camera.h"
 
-const char* MODEL_PATH = "res/models/viking_room.obj";
+const char* MODEL_PATH = "res/models/viking_room.glb";
 const char* TEXTURE_PATH = "res/textures/viking_room.png";
 
 struct Vertex
@@ -1637,46 +1635,67 @@ private:
 
 	void LoadModel()
 	{
-		tinyobj::attrib_t attrib;
-
-		std::vector<tinyobj::shape_t> shapes;
-		std::vector<tinyobj::material_t> materials;
-
+		tinygltf::Model model;
+		tinygltf::TinyGLTF loader;
 		std::string warn, err;
 
-		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH))
+		if (!loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH))
 		{
-			throw std::runtime_error(warn + err);
+			throw std::runtime_error("Failed to load model: " + warn + err);
 		}
 
-		std::unordered_map<Vertex, uint32_t> uniqueVertices{};
-
-		for (const auto& shape : shapes)
+		for (const auto& mesh : model.meshes)
 		{
-			for (const auto& index : shape.mesh.indices)
+			for (const auto& primitive : mesh.primitives)
 			{
-				Vertex vertex{};
-				vertex.Position = {
-					attrib.vertices[3 * index.vertex_index + 0],
-					attrib.vertices[3 * index.vertex_index + 1],
-					attrib.vertices[3 * index.vertex_index + 2],
-				};
+				const tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes.at("POSITION")];
+				const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
+				const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
+				const float* positions = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset]);
 
-				vertex.TexCoord = {
-					attrib.texcoords[2 * index.texcoord_index + 0],
-					1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-				};
-
-				vertex.Color = { 1.0f, 1.0f, 1.0f };
-
-				if (uniqueVertices.count(vertex) == 0)
+				for (size_t i = 0; i < posAccessor.count; i++)
 				{
-					uniqueVertices[vertex] = static_cast<uint32_t>(m_Vertices.size());
+					Vertex vertex
+					{
+						.Position
+						{
+							positions[i * 3 + 0],
+							positions[i * 3 + 1],
+							positions[i * 3 + 2]
+						}
+					};
+
+					if (primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end())
+					{
+						const tinygltf::Accessor& texAccessor = model.accessors[primitive.attributes.at("TEXCOORD_0")];
+						const tinygltf::BufferView& texBufferView = model.bufferViews[texAccessor.bufferView];
+						const tinygltf::Buffer& texBuffer = model.buffers[texBufferView.buffer];
+
+						const float* texCoords = reinterpret_cast<const float*>(&texBuffer.data[texBufferView.byteOffset]);
+						vertex.TexCoord = 
+						{
+							texCoords[i * 2 + 0],
+							texCoords[i * 2 + 1]
+						};
+					}
+
+					vertex.Color = { 1.0f, 1.0f, 1.0f };
 					m_Vertices.push_back(vertex);
 				}
 
-				m_Indices.push_back(uniqueVertices[vertex]);
+				// Load indices if they exist
+				if (primitive.indices >= 0) 
+				{
+					const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+					const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
+					const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
 
+					const uint16_t* indexData = reinterpret_cast<const uint16_t*>(&indexBuffer.data[indexBufferView.byteOffset]);
+					for (size_t i = 0; i < indexAccessor.count; i++) 
+					{
+						m_Indices.push_back(indexData[i]);
+					}
+				}
 			}
 		}
 	}

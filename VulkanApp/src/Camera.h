@@ -17,10 +17,10 @@ public:
 
 private:
 	glm::vec3 m_Velocity{ 0.0f };
-	glm::vec3 m_Position{ 2.0f, 2.0f, 2.0f };
+	glm::vec3 m_Position{ 3.0f, 2.5f, -1.5f };
 
-	float m_Pitch = 30.5f;
-	float m_Yaw   = 2.5f;
+	float m_Pitch = 32.0f;
+	float m_Yaw   = -10.5f;
 
 	float m_Speed = 1.0f;
 	float m_Sensitivity = 400.0f;

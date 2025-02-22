@@ -15,13 +15,20 @@ IncludeDir = {}
 IncludeDir["Vulkan"] = "%{VULKAN_SDK}/Include/"
 IncludeDir["glm"] = "%{wks.location}/vendor/glm/"
 IncludeDir["GLFW"] = "%{wks.location}/vendor/GLFW/include/"
-IncludeDir["stb"] = "%{wks.location}/vendor/stb/src/"
 IncludeDir["imgui"] = "%{wks.location}/vendor/imgui/"
-IncludeDir["tinyobjloader"] = "%{wks.location}/vendor/"
+IncludeDir["tinygltf"] = "%{wks.location}/vendor/"
 
 LibraryDir = {}
 LibraryDir["Vulkan"] = "%{VULKAN_SDK}/Lib/"
 LibraryDir["GLFW"] = "%{wks.location}/vendor/GLFW/bin/%{cfg.buildcfg}/"
-LibraryDir["stb"] = "%{wks.location}/vendor/stb/bin/%{cfg.buildcfg}/"
 LibraryDir["imgui"] = "%{wks.location}/vendor/imgui/bin/%{cfg.buildcfg}/"
-LibraryDir["tinyobjloader"] = "%{wks.location}/vendor/tinyobjloader/bin/%{cfg.buildcfg}/"
+LibraryDir["tinygltf"] = "%{wks.location}/vendor/tinygltf/bin/%{cfg.buildcfg}/"
+
+function IncludeDependencyProjects()
+    include "vendor/GLFW"
+    include "vendor/imgui"
+
+    -- tinygltf comes with stb_image included
+    -- we just use stb from tinygltf
+    include "vendor/tinygltf"
+end

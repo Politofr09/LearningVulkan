@@ -11,8 +11,5 @@ workspace "LearningVulkan"
     include "VulkanApp"
 
     group "Dependencies"
-        include "vendor/GLFW"
-        include "vendor/stb"
-        include "vendor/imgui"
-        include "vendor/tinyobjloader"
+        IncludeDependencyProjects()
     group ""

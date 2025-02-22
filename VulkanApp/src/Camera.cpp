@@ -28,6 +28,9 @@ void Camera::Update(float deltaTime)
     glm::mat4 cameraRotation = GetRotationMatrix();
     m_Position += glm::vec3(cameraRotation * glm::vec4(m_Velocity * deltaTime, 0.0f));
 
+    //std::cout << m_Position.x << " " << m_Position.y << " " << m_Position.z << " " << std::endl;
+    //std::cout << m_Pitch << " " << m_Yaw << std::endl << std::endl;
+
     m_Velocity = glm::vec3(0.0f);
 }
 
@@ -41,7 +44,7 @@ glm::mat4 Camera::GetView() const
 glm::mat4 Camera::GetRotationMatrix() const
 {
     glm::quat pitchRotation = glm::angleAxis(m_Pitch, glm::vec3(-1.0f, 0.0f, 0.0f));
-    glm::quat yawRotation = glm::angleAxis(m_Yaw, glm::vec3(0.0f, 0.0f, 1.0f));
+    glm::quat yawRotation = glm::angleAxis(m_Yaw, glm::vec3(0.0f, 1.0f, 0.0f));
 
     return glm::toMat4(yawRotation) * glm::toMat4(pitchRotation);
 }
