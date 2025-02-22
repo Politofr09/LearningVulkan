@@ -30,7 +30,6 @@
 #include "Camera.h"
 
 const char* MODEL_PATH = "res/models/viking_room.glb";
-const char* TEXTURE_PATH = "res/textures/viking_room.png";
 
 struct Vertex
 {
@@ -292,10 +291,8 @@ private:
 		CreateCommandPool();
 		CreateDepthRessources();
 		CreateFrameBuffers();
-		CreateTextureImage();
-		CreateTextureImageView();
-		CreateTextureSampler();
 		LoadModel();
+
 		CreateVertexBuffer();
 		CreateIndexBuffer();
 		CreateUniformBuffers();
@@ -1195,16 +1192,8 @@ private:
 		m_DepthImageView = CreateImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 	}
 
-	void CreateTextureImage()
+	void CreateTextureImage(int width, int height, int channels, const unsigned char* imageData)
 	{
-		int width, height, channels;
-		stbi_uc* pixels = stbi_load(TEXTURE_PATH, &width, &height, &channels, STBI_rgb_alpha);
-
-		if (!pixels)
-		{
-			throw std::runtime_error("Failed to load texture image!");
-		}
-
 		m_MipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1;
 
 		VkDeviceSize imageSize = width * height * 4;
@@ -1215,10 +1204,8 @@ private:
 
 		void* data;
 		vkMapMemory(m_Device, stagingBufferMemory, 0, imageSize, 0, &data);
-			memcpy(data, pixels, static_cast<size_t>(imageSize));
+			memcpy(data, imageData, static_cast<size_t>(imageSize));
 		vkUnmapMemory(m_Device, stagingBufferMemory);
-
-		stbi_image_free(pixels);
 
 		CreateImage(width, height, m_MipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_TextureImage, m_TextureImageMemory);
 	
@@ -1694,6 +1681,34 @@ private:
 					for (size_t i = 0; i < indexAccessor.count; i++) 
 					{
 						m_Indices.push_back(indexData[i]);
+					}
+				}
+
+				// Load material
+				if (primitive.material >= 0)
+				{
+					const tinygltf::Material& material = model.materials[primitive.material];
+					// Base Color Texture
+					if (material.pbrMetallicRoughness.baseColorTexture.index >= 0) 
+					{
+						int textureIndex = material.pbrMetallicRoughness.baseColorTexture.index;
+						const tinygltf::Texture& texture = model.textures[textureIndex];
+
+						if (texture.source >= 0)
+						{
+							const tinygltf::Image& image = model.images[texture.source];
+
+							// Image data (RGBA)
+							int width = image.width;
+							int height = image.height;
+							int components = image.component;
+							const unsigned char* imageData = image.image.data();
+
+							// Now you can upload it to Vulkan as a texture!
+							CreateTextureImage(width, height, components, imageData);
+							CreateTextureImageView();
+							CreateTextureSampler();
+						}
 					}
 				}
 			}
